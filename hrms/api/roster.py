@@ -9,20 +9,26 @@ from hrms.hr.doctype.shift_assignment_tool.shift_assignment_tool import create_s
 from hrms.hr.doctype.shift_schedule.shift_schedule import get_or_insert_shift_schedule
 from hrms.telemetry import capture
 
-ALLOWED_EMPLOYEE_FILTERS = {
-	"status",
-	"company",
-	"department",
-	"branch",
-	"designation",
-	"employee_name",
-	"reports_to",
-	"grade",
-	"employment_type",
-	"station",
-	"production_line",
-	"employee_number",
-	"location",
+# default fields (frappe.model.default_fields) that make sense to filter on
+# even though they aren't part of Employee's own field list
+ALLOWED_EMPLOYEE_DEFAULT_FILTERS = {"name"}
+
+# fieldtypes that are safe and sensible to filter Employee by; layout fields
+# (Section Break, Column Break, ...), tables, attachments etc. are excluded
+FILTERABLE_FIELDTYPES = {
+	"Data",
+	"Link",
+	"Select",
+	"Int",
+	"Float",
+	"Currency",
+	"Percent",
+	"Check",
+	"Date",
+	"Datetime",
+	"Duration",
+	"Small Text",
+	"Barcode",
 }
 
 ALLOWED_SHIFT_FILTERS = {
@@ -32,13 +38,42 @@ ALLOWED_SHIFT_FILTERS = {
 }
 
 
+def _get_employee_field(fieldname: str):
+	if fieldname in ALLOWED_EMPLOYEE_DEFAULT_FILTERS:
+		return frappe._dict(fieldname=fieldname, fieldtype="Data")
+	field = frappe.get_meta("Employee").get_field(fieldname)
+	if field and field.fieldtype in FILTERABLE_FIELDTYPES:
+		return field
+	return None
+
+
 def _validate_employee_filters(employee_filters: dict[str, str]) -> None:
 	for key in employee_filters:
-		if key not in ALLOWED_EMPLOYEE_FILTERS:
+		if not _get_employee_field(key):
 			frappe.throw(
 				_("Invalid employee filter: {0}").format(frappe.bold(key)),
 				frappe.PermissionError,
 			)
+
+
+@frappe.whitelist()
+def get_employee_filter_fields() -> list[dict]:
+	"""Fields on Employee that can be used to build roster filters, driven by
+	the doctype's own (standard + custom) fields instead of a hardcoded list."""
+	meta = frappe.get_meta("Employee")
+	fields = [
+		{
+			"fieldname": df.fieldname,
+			"label": df.label or df.fieldname,
+			"fieldtype": df.fieldtype,
+			"options": df.options,
+		}
+		for df in meta.fields
+		if df.fieldtype in FILTERABLE_FIELDTYPES
+	]
+	fields.append({"fieldname": "name", "label": _("ID"), "fieldtype": "Data", "options": None})
+	fields.sort(key=lambda f: f["label"])
+	return fields
 
 
 def _validate_shift_filters(shift_filters: dict[str, str]) -> None:
