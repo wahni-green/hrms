@@ -67,20 +67,11 @@ import MonthViewTable from "../components/MonthViewTable.vue";
 import MonthViewHeader from "../components/MonthViewHeader.vue";
 import ShiftAssignmentDialog from "../components/ShiftAssignmentDialog.vue";
 
+// Employee filters are field-driven (see DynamicEmployeeFilters.vue), so any
+// Employee fieldname is a valid key here - not a fixed list.
 export type EmployeeFilters = {
-	[K in
-		| "status"
-		| "company"
-		| "department"
-		| "branch"
-		| "designation"
-		| "reports_to"
-		| "grade"
-		| "employment_type"
-		| "station"
-		| "production_line"
-		| "employee_number"
-		| "location"]?: string;
+	status?: string;
+	[fieldname: string]: string | undefined;
 };
 export type ShiftFilters = {
 	[K in "shift_type" | "shift_location"]?: string;
@@ -110,24 +101,32 @@ const addToMonth = (change: number) => {
 	firstOfMonth.value = firstOfMonth.value.add(change, "M");
 };
 
+const SHIFT_FILTER_FIELDS = ["shift_type", "shift_location"];
+
+// Replace both filter objects wholesale on every change instead of only
+// patching keys present in newFilters - a key that disappears between
+// emissions (e.g. a dynamic filter row removed, or its field swapped for a
+// different one) must actually be cleared, not just left unmentioned.
 const updateFilters = (newFilters: EmployeeFilters & ShiftFilters) => {
 	isCompanySelected.value = !!newFilters.company;
 	if (!isCompanySelected.value) return;
-	let employeeUpdated = false;
-	(Object.entries(newFilters) as [keyof EmployeeFilters | keyof ShiftFilters, string][]).forEach(
-		([key, value]) => {
-			if (["shift_type", "shift_location"].includes(key)) {
-				if (value) shiftFilters[key] = value;
-				else delete shiftFilters[key];
-				return;
-			}
 
-			if (value) employeeFilters[key] = value;
-			else delete employeeFilters[key];
-			employeeUpdated = true;
-		},
-	);
-	if (employeeUpdated) employees.fetch();
+	const nextEmployeeFilters: EmployeeFilters = { status: "Active" };
+	const nextShiftFilters: ShiftFilters = {};
+
+	Object.entries(newFilters).forEach(([key, value]) => {
+		if (!value) return;
+		if (SHIFT_FILTER_FIELDS.includes(key)) nextShiftFilters[key as keyof ShiftFilters] = value;
+		else nextEmployeeFilters[key] = value;
+	});
+
+	Object.keys(employeeFilters).forEach((key) => delete employeeFilters[key]);
+	Object.assign(employeeFilters, nextEmployeeFilters);
+
+	Object.keys(shiftFilters).forEach((key) => delete shiftFilters[key as keyof ShiftFilters]);
+	Object.assign(shiftFilters, nextShiftFilters);
+
+	employees.fetch();
 };
 
 // RESOURCES
