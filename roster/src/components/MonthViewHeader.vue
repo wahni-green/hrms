@@ -11,7 +11,7 @@
 
 		<!-- Filters -->
 		<div class="flex flex-wrap items-center justify-end gap-2.5">
-			<div v-for="[key, filter] of Object.entries(filters)" :key="key" class="filter-item w-40">
+			<div v-for="[key, filter] of visibleFilters" :key="key" class="filter-item w-40">
 				<FormControl
 					type="autocomplete"
 					:placeholder="toTitleCase(key)"
@@ -45,7 +45,7 @@
 </style>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { FormControl, createResource, createListResource } from "frappe-ui";
 import { Dayjs } from "dayjs";
 
@@ -99,10 +99,17 @@ const filters: Record<PinnedField, PinnedFilter> = reactive(
 
 let dynamicFilters: Record<string, string> = {};
 
+const visibleFilters = computed(() =>
+	Object.entries(filters).filter(([key]) =>
+		(permittedFilterDoctypes.data || []).includes(toTitleCase(key)),
+	),
+);
+
 watch(
 	() => filters.company.model,
 	(val) => {
-		if (val?.value) getFilterOptions("department", { company: val.value });
+		if (val?.value && isPermitted("department"))
+			getFilterOptions("department", { company: val.value });
 		else {
 			filters.department.model = null;
 			filters.department.options = [];
@@ -143,10 +150,23 @@ const toTitleCase = (str: string) =>
 const defaultCompany = createResource({
 	url: "hrms.api.roster.get_default_company",
 	auto: true,
+	onSuccess: () => permittedFilterDoctypes.fetch(),
+});
+
+// skip filters whose doctype the user cannot list, instead of raising permission errors
+const permittedFilterDoctypes = createResource({
+	url: "hrms.api.roster.get_permitted_filter_doctypes",
 	onSuccess: () => {
-		pinnedFieldnames.forEach((field) => getFilterOptions(field));
+		// department is loaded once a company is picked
+		pinnedFieldnames
+			.filter((field) => field !== "department")
+			.filter(isPermitted)
+			.forEach((field) => getFilterOptions(field));
 	},
 });
+
+const isPermitted = (field: PinnedField) =>
+	(permittedFilterDoctypes.data || []).includes(toTitleCase(field));
 
 const getFilterOptions = (field: PinnedField, listFilters: { company?: string } = {}) => {
 	createListResource({

@@ -31,6 +31,13 @@ frappe.query_reports["Shift Attendance"] = {
 			},
 		},
 		{
+			fieldname: "employment_type",
+			label: __("Employment Type"),
+			fieldtype: "Link",
+			options: "Employment Type",
+			hidden: !frappe.model.can_read("Employment Type"),
+		},
+		{
 			fieldname: "shift",
 			label: __("Shift Type"),
 			fieldtype: "Link",
@@ -80,8 +87,8 @@ frappe.query_reports["Shift Attendance"] = {
 	formatter: (value, row, column, data, default_formatter) => {
 		value = default_formatter(value, row, column, data);
 		if (
-			(column.fieldname === "in_time" && data.late_entry) ||
-			(column.fieldname === "out_time" && data.early_exit)
+			(column.fieldname === "in_time" && data?.late_entry) ||
+			(column.fieldname === "out_time" && data?.early_exit)
 		) {
 			value = `<span style='color:red!important'>${value}</span>`;
 		}

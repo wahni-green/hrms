@@ -102,7 +102,10 @@ def get_linked_job_offer(doc, job_applicant: str | None):
 	offer_name = doc.get("job_offer")
 	if not offer_name and job_applicant:
 		offer_name = frappe.db.get_value(
-			"Job Offer", {"job_applicant": job_applicant, "docstatus": ["!=", 2]}, "name"
+			"Job Offer",
+			{"job_applicant": job_applicant, "docstatus": ["!=", 2]},
+			"name",
+			order_by="creation desc",
 		)
 	if not offer_name:
 		return None
@@ -148,9 +151,12 @@ def get_timeline_data(doctype: str, name: str) -> dict:
 	"""Return timeline for attendance"""
 	from frappe.desk.notifications import get_open_count
 
+	if doctype != "Employee":
+		frappe.throw(_("Timeline data is only available for Employee"))
+
 	out = {}
 
-	frappe.has_permission(doctype, "read", name, throw=True)
+	frappe.has_permission("Employee", "read", name, throw=True)
 	frappe.has_permission("Attendance", "read", throw=True)
 
 	open_count = get_open_count(doctype, name)
@@ -189,7 +195,8 @@ def get_assignable_masters(company: str) -> dict[str, bool]:
 	}
 
 	return {
-		doctype: bool(frappe.get_list(doctype, filters=filters, limit=1, pluck="name"))
+		doctype: frappe.has_permission(doctype, "select")
+		and bool(frappe.get_list(doctype, filters=filters, limit=1, pluck="name"))
 		for doctype, filters in masters.items()
 	}
 
